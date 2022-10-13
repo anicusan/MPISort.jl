@@ -1,10 +1,6 @@
 module MPISort
 
 
-# Public exports
-export SIHSort, SIHSortStats
-
-
 # Private imports
 using Base.Sort
 using Base.Order
@@ -16,7 +12,11 @@ import MPI
 
 
 # Method additions
-import Base.Sort: sort!
+# import Base.Sort: sort!
+
+
+# Public exports
+export SIHSort, SIHSortStats, sihsort!
 
 
 
@@ -52,6 +52,9 @@ Sampling with interpolated histograms sorting algorithm, or SIHSort (pronounce _
     stats::SIHSortStats                         = SIHSortStats()
 end
 
+SIHSort(comm) = SIHSort(;comm=comm)
+SIHSort(comm, sorter) = SIHSort(;comm=comm, sorter=sorter)
+
 
 
 
@@ -64,7 +67,7 @@ Standard Julia sorting API for SIHSort.
 Important: the input vector will be mutated, but the sorted elements for each MPI rank **will be
 returned**; this is required as the vector size will change with data migration.
 """
-function sort!(
+function sihsort!(
     v::AbstractVector;
     alg::SIHSort,
     lt=isless,
