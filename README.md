@@ -58,6 +58,7 @@ MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Allt
 If $N$ is the total number of elements spread out across $P$ MPI ranks, then `SIHSort` needs, per rank:
 
 $$ k P + k P + P + 3(P - 1) + \sim \frac{N}{P} $$
+
 $$ k = 2P log_2 P $$
 
 Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
@@ -65,7 +66,7 @@ Except for the final redistribution on a single new array of length $\sim \frac{
 
 ### References
 
-This algorithm, builds strongly on prior art:
+This algorithm builds on prior art:
 
 - _Harsh V, Kale L, Solomonik E. Histogram sort with sampling._ : followed main ideas and theoretical results, but with deterministic sampling and original communication and interpolation optimisations.
 - _Sundar H, Malhotra D, Biros G. Hyksort: a new variant of hypercube quicksort on distributed memory architectures._
