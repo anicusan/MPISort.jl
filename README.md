@@ -57,10 +57,7 @@ MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Allt
 
 If $N$ is the total number of elements spread out across $P$ MPI ranks, then `SIHSort` needs, per rank:
 
-```math
-k P + k P + P + 3(P - 1) + \sim \frac{N}{P}
-\text{where } k = 2P log_2(P)
-```
+$$ k P + k P + P + 3(P - 1) + \sim \frac{N}{P} \\ k = 2P log_2(P) $$
 
 Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
 
