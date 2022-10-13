@@ -13,7 +13,7 @@ MPI-related), optimised for minimum inter-rank communication and memory footprin
 - Works for any comparison-based data, with additional optimisations for numeric elements.
 - Optimised for minimum MPI communication; can use Julia threads on each shared-memory node.
 - The node-local arrays may have different sizes; sorting will try to balance number of elements held by each MPI rank.
-- Works with any `AbstractVector`, including accelerators such as GPUs (TODO: test this further). Julia type-inference and optimisations are wonders.
+- Works with any `AbstractVector`, including accelerators such as GPUs (TODO: test this further). Julia type-inference and optimisations do wonders.
 - Implements the standard Julia `sort!` API, and naturally works for custom data, comparisons, orderings, etc.
 
 
@@ -57,11 +57,10 @@ MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Allt
 
 If $N$ is the total number of elements spread out across $P$ MPI ranks, then `SIHSort` needs, per rank:
 
-$$
+```math
 k P + k P + P + 3(P - 1) + \sim \frac{N}{P}
-
 \text{where } k = 2P log_2(P)
-$$
+```
 
 Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
 
@@ -74,8 +73,8 @@ This algorithm, builds strongly on prior art:
 - _Sundar H, Malhotra D, Biros G. Hyksort: a new variant of hypercube quicksort on distributed memory architectures._
 - _Shi H, Schaeffer J. Parallel sorting by regular sampling._
 - _Solomonik E, Kale LV. Highly scalable parallel sorting._
-- John Lapeyre, integer base-2 logarithm - https://github.com/jlapeyre/ILog2.jl.
-- _Byrne S, Wilcox LC, Churavy V. MPI. jl: Julia bindings for the Message Passing Interface.: absolute heroes who made MPI a joy to use in Julia.
+- _John Lapeyre, integer base-2 logarithm_ - https://github.com/jlapeyre/ILog2.jl.
+- _Byrne S, Wilcox LC, Churavy V. MPI. jl: Julia bindings for the Message Passing Interface._ : absolute heroes who made MPI a joy to use in Julia.
 
 
 # License
