@@ -4,8 +4,8 @@ _Don't put all your eggs in one basket!_
 Sorting $N$ elements spread out across $P$ processors, _with no processor being able to hold all
 elements at once_ is a difficult problem, with very few open-source implementations in
 [C++](https://github.com/hsundar/usort) and [Charm++](https://github.com/vipulharsh/HSS). This
-library hosts such MPI-based sorting algorithms for the Julia ecosystem; at the moment, one optimised
-algorithm is provided:
+library provides the `mpisort!` function for distributed MPI-based sorting algorithms following the
+standard Julia `Base.sort!` signature; at the moment, one optimised algorithm is provided:
 
 
 ## `SIHSort`
@@ -24,6 +24,8 @@ MPI-related), optimised for minimum inter-rank communication and memory footprin
 ### Example
 
 ```julia
+# File:   mpisort.jl
+# Run as: mpiexec -n 4 julia --threads=2 mpisort.jl
 
 using MPI
 using MPISort
@@ -44,7 +46,7 @@ local_array = rand(rng, 1:500, num_elements)
 
 # Sort arrays across all MPI ranks
 alg = SIHSort(comm)
-sorted_local_array = sihsort!(local_array; alg=alg)
+sorted_local_array = mpisort!(local_array; alg=alg)
 
 # Print each local array sequentially
 for i in 0:nranks - 1
@@ -57,7 +59,38 @@ end
 **Note:** because the data is redistributed between nodes, the vector size must change - hence it
 is different to the in-place `Base.sort!`. The input vector is mutated, but another vector - with
 potentially different size and elements - is returned. This is the reason for a different function
-signature (`sihsort!` with a return value); however, it has the exact same inputs as `Base.sort!`.
+signature (`mpisort!` with a return value); however, it has the exact same inputs as `Base.sort!`.
+
+
+Different sorting settings:
+
+```julia
+
+# Automatically uses MPI.COMM_WORLD as communicator; doesn't save sorting stats
+sorted_local_array = mpisort!(local_array; alg=SIHSort())
+
+# Reverse sorting; specify communicator explicitly
+sorted_local_array = mpisort!(local_array; alg=SIHSort(comm), rev=true)
+
+# Specify key to sort by; see https://docs.julialang.org/en/v1/base/sort/
+sorted_local_array = mpisort!(local_array; alg=SIHSort(), by=x->x["key"])
+
+# Different ordering; see https://docs.julialang.org/en/v1/base/sort/#Alternate-orderings
+sorted_local_array = mpisort!(local_array; alg=SIHSort(), order=Reverse)
+
+# Save sorting stats
+alg = SIHSort(comm)
+sorted_local_array = mpisort!(local_array; alg=alg)
+
+@show alg.stats.splitters               # `nranks - 1` elements splitting arrays between nodes
+@show alg.stats.num_elements            # `nranks` integers specifying number of elements on each node
+
+# Use different in-place local sorter
+alg = SIHSort(comm, nothing)            # Default: standard Base.sort!
+alg = SIHSort(comm, QuickSort)          # Specify algorithm, passed to Base.sort!(...; alg=<Algorithm>)
+alg = SIHSort(comm, v -> mysorter!(v))  # Pass any function that sorts a local vector in-place
+
+```
 
 
 ### Communication and Memory Footprint
@@ -71,7 +104,7 @@ $$ k P + k P + P + 3(P - 1) + \sim \frac{N}{P} $$
 
 Where $k$ is the number of samples extracted from each node; following [1], we use:
 
-$$ k = 2P \, log_2 P $$
+$$ k = 2P \ log_2 P $$
 
 Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint
 only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone
