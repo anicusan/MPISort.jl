@@ -23,7 +23,7 @@ local_array = rand(rng, 1:500, num_elements)
 
 # Sort arrays across all MPI ranks
 alg = SIHSort(comm)
-sorted_local_array = sihsort!(local_array; alg=alg)
+sorted_local_array = mpisort!(local_array; alg=alg)
 
 # Print each local array sequentially
 for i in 0:nranks - 1

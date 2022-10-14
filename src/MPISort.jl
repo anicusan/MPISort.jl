@@ -16,7 +16,8 @@ import MPI
 
 
 # Public exports
-export SIHSort, SIHSortStats, sihsort!
+export mpisort!
+export SIHSort, SIHSortStats
 
 
 
@@ -67,7 +68,7 @@ Standard Julia sorting API for SIHSort.
 Important: the input vector will be mutated, but the sorted elements for each MPI rank **will be
 returned**; this is required as the vector size will change with data migration.
 """
-function sihsort!(
+function mpisort!(
     v::AbstractVector;
     alg::SIHSort,
     lt=isless,
