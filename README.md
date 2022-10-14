@@ -1,7 +1,11 @@
 # MPISort
 _Don't put all your eggs in one basket!_
 
-Sorting $N$ elements spread out across $P$ processors, _with no processor being able to hold all elements at once_ is a difficult problem, with few open-source implementations in [C++](https://github.com/hsundar/usort) and [Charm++](https://github.com/vipulharsh/HSS). This library hosts such MPI-based sorting algorithms for the Julia ecosystem; at the moment, one optimised algorithm is provided:
+Sorting $N$ elements spread out across $P$ processors, _with no processor being able to hold all
+elements at once_ is a difficult problem, with very few open-source implementations in
+[C++](https://github.com/hsundar/usort) and [Charm++](https://github.com/vipulharsh/HSS). This
+library hosts such MPI-based sorting algorithms for the Julia ecosystem; at the moment, one optimised
+algorithm is provided:
 
 
 ## `SIHSort`
@@ -50,30 +54,40 @@ end
 
 ```
 
+**Note:** because the data is redistributed between nodes, the vector size must change - hence it
+is different to the in-place `Base.sort!`. The input vector is mutated, but another vector - with
+potentially different size and elements - is returned. This is the reason for a different function
+signature (`sihsort!` with a return value); however, it has the exact same inputs as `Base.sort!`.
+
 
 ### Communication and Memory Footprint
 
-MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Alltoall, Allreduce, Alltoallv. I am not aware of a non-IO based algorithm with less communication (if you do know one, please open an issue!).
+MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Alltoall, Allreduce, Alltoallv.
+I am not aware of a non-IO based algorithm with less communication (if you do know one, please open an issue!).
 
-If $N$ is the total number of elements spread out across $P$ MPI ranks, then `SIHSort` needs, per rank:
+If $N$ is the total number of elements spread out across $P$ MPI ranks, then the per-rank memory footprint of `SIHSort` is:
 
 $$ k P + k P + P + 3(P - 1) + \sim \frac{N}{P} $$
 
-$$ k = 2P log_2 P $$
+Where $k$ is the number of samples extracted from each node; following [1], we use:
 
-Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
+$$ k = 2P \, log_2 P $$
+
+Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint
+only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone
+got a spare 200,000 nodes to benchmark this?
 
 
 ### References
 
 This algorithm builds on prior art:
 
-- _Harsh V, Kale L, Solomonik E. Histogram sort with sampling._ : followed main ideas and theoretical results, but with deterministic sampling and original communication and interpolation optimisations.
-- _Sundar H, Malhotra D, Biros G. Hyksort: a new variant of hypercube quicksort on distributed memory architectures._
-- _Shi H, Schaeffer J. Parallel sorting by regular sampling._
-- _Solomonik E, Kale LV. Highly scalable parallel sorting._
-- _John Lapeyre, integer base-2 logarithm_ - https://github.com/jlapeyre/ILog2.jl.
-- _Byrne S, Wilcox LC, Churavy V. MPI. jl: Julia bindings for the Message Passing Interface._ : absolute heroes who made MPI a joy to use in Julia.
+- [1] _Harsh V, Kale L, Solomonik E. Histogram sort with sampling._ : followed main ideas and theoretical results, but with deterministic sampling and original communication and interpolation optimisations.
+- [2] _Sundar H, Malhotra D, Biros G. Hyksort: a new variant of hypercube quicksort on distributed memory architectures._
+- [3] _Shi H, Schaeffer J. Parallel sorting by regular sampling._
+- [4] _Solomonik E, Kale LV. Highly scalable parallel sorting._
+- [5] _John Lapeyre, integer base-2 logarithm_ - https://github.com/jlapeyre/ILog2.jl.
+- [6] _Byrne S, Wilcox LC, Churavy V. MPI. jl: Julia bindings for the Message Passing Interface._ : absolute heroes who made MPI a joy to use in Julia.
 
 
 # License
