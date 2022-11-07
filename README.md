@@ -100,13 +100,13 @@ I am not aware of a non-IO based algorithm with less communication (if you do kn
 
 If $N$ is the total number of elements spread out across $P$ MPI ranks, then the per-rank memory footprint of `SIHSort` is:
 
-$$ k P + k P + P + 3(P - 1) + \sim \frac{N}{P} $$
+$$ k P + k P + P + 3(P - 1) + \frac{N + \epsilon}{P} $$
 
 Where $k$ is the number of samples extracted from each node; following [1], we use:
 
 $$ k = 2P \ log_2 P $$
 
-Except for the final redistribution on a single new array of length $\sim \frac{N}{P}$, the memory footprint
+Except for the final redistribution on a single new array of length $\frac{N + \epsilon}{P}$, the memory footprint
 only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone
 got a spare 200,000 nodes to benchmark this?
 

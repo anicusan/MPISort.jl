@@ -8,11 +8,8 @@ using Base.Order
 using Parameters
 using LoopVectorization
 
-import MPI
-
-
-# Method additions
-# import Base.Sort: sort!
+using MPI
+using DocStringExtensions
 
 
 # Public exports
@@ -24,9 +21,16 @@ export SIHSort, SIHSortStats
 
 
 """
-    SIHSortStats([splitters], [num_elements])
+    $(TYPEDEF)
 
 Useful stats saved after sorting.
+
+# Methods
+    SIHSortStats(splitters, num_elements)
+    SIHSortStats(;splitters=nothing, num_elements=nothing)
+
+# Fields
+    $(TYPEDFIELDS)
 """
 @with_kw mutable struct SIHSortStats
     "Values used to split elements across MPI ranks, length=`nranks - 1`"
@@ -38,12 +42,20 @@ end
 
 
 """
-    SIHSort([comm], [sorter], [stats])
+    $(TYPEDEF)
 
 Sampling with interpolated histograms sorting algorithm, or SIHSort (pronounce _sigh_ sort).
+
+# Methods
+    SIHSort(comm)
+    SIHSort(comm, sorter)
+    SIHSort(;comm=MPI.COMM_WORLD, sorter=nothing, stats=SIHSortStats())
+
+# Fields
+    $(TYPEDFIELDS)
 """
 @with_kw struct SIHSort <: Algorithm
-    "MPI communicator used; by default `MPI.COMM_WORLD`."
+    "MPI communicator used."
     comm::MPI.Comm                              = MPI.COMM_WORLD
 
     "Local in-place sorter used."
@@ -61,9 +73,16 @@ SIHSort(comm, sorter) = SIHSort(;comm=comm, sorter=sorter)
 
 
 """
-    sort!
+    function mpisort!(
+        v::AbstractVector;
+        alg::SIHSort,
+        lt=isless,
+        by=identity,
+        rev::Bool=false,
+        order::Ordering=Forward,
+    )
 
-Standard Julia sorting API for SIHSort.
+Distributed MPI-based sorting API with the same inputs as the base Julia sorters.
 
 Important: the input vector will be mutated, but the sorted elements for each MPI rank **will be
 returned**; this is required as the vector size will change with data migration.
