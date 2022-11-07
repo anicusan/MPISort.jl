@@ -2,6 +2,7 @@ using MPI
 using MPISort
 using Test
 
+
 @testset "basic" begin
     np = 2
     mpiexec() do exe
