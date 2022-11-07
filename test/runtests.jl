@@ -9,3 +9,12 @@ using Test
         @test success(p)
     end
 end
+
+
+@testset "largescale" begin
+    np = 8
+    mpiexec() do exe
+        p = run(`$exe -n $np $(Base.julia_cmd()) largescale.jl`)
+        @test success(p)
+    end
+end

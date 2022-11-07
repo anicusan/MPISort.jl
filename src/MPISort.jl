@@ -5,10 +5,8 @@ module MPISort
 using Base.Sort
 using Base.Order
 
-using Parameters
-using LoopVectorization
-
 using MPI
+using Parameters
 using DocStringExtensions
 
 
@@ -232,7 +230,7 @@ function mpisort!(
     # The histogram dictates how many elements will be sent to each process
     num_elements_send = Vector{Int64}(undef, nranks)
     num_elements_send[1] = histogram[1]
-    @turbo for i in 2:nranks - 1
+    @inbounds @simd for i in 2:nranks - 1
         num_elements_send[i] = histogram[i] - histogram[i - 1]
     end
     num_elements_send[nranks] = num_elements - histogram[nranks - 1]
@@ -243,7 +241,7 @@ function mpisort!(
     MPI.Alltoall!(
         MPI.UBuffer(num_elements_send, 1),
         MPI.UBuffer(num_elements_recv, 1),
-        comm
+        comm,
     )
 
     # Summing the histogram will dictate how many elements will be stored locally.
@@ -259,7 +257,7 @@ function mpisort!(
     num_elements_after = Vector{Int64}(undef, nranks)
 
     num_elements_after[1] = histogram[1]
-    @turbo for i in 2:nranks - 1
+    @inbounds @simd for i in 2:nranks - 1
         num_elements_after[i] = histogram[i] - histogram[i - 1]
     end
     num_elements_after[nranks] = num_elements_global - histogram[nranks - 1]
