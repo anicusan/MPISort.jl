@@ -1,6 +1,11 @@
 # MPISort
 _Don't put all your eggs in one basket!_
 
+[![CI](https://github.com/anicusan/MPISort.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/anicusan/MPISort.jl/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/anicusan/MPISort.jl)](https://github.com/anicusan/MPISort.jl)
+[![DevDocs](https://img.shields.io/badge/docs-dev-blue.svg)](https://anicusan.github.io/MPISort.jl/dev/)
+
+
 Sorting $N$ elements spread out across $P$ processors, _with no processor being able to hold all
 elements at once_ is a difficult problem, with very few open-source implementations in
 [C++](https://github.com/hsundar/usort) and [Charm++](https://github.com/vipulharsh/HSS). This
@@ -95,10 +100,12 @@ alg = SIHSort(comm, v -> mysorter!(v))  # Pass any function that sorts a local v
 
 ### Communication and Memory Footprint
 
-MPI communication subroutines used, in order: Gather, Bcast, Reduce, Bcast, Alltoall, Allreduce, Alltoallv.
-I am not aware of a non-IO based algorithm with less communication (if you do know one, please open an issue!).
+Only optimised collective MPI communication is used, in order: Gather, Bcast, Reduce, Bcast,
+Alltoall, Allreduce, Alltoallv. I am not aware of a non-IO based algorithm with less communication
+(if you do know one, please open an issue!).
 
-If $N$ is the total number of elements spread out across $P$ MPI ranks, then the per-rank memory footprint of `SIHSort` is:
+If $N$ is the total number of elements spread out across $P$ MPI ranks, then the per-rank memory
+footprint of `SIHSort` is:
 
 $$ k P + k P + P + 3(P - 1) + \frac{N + \epsilon}{P} $$
 
@@ -106,9 +113,9 @@ Where $k$ is the number of samples extracted from each node; following [1], we u
 
 $$ k = 2P \ log_2 P $$
 
-Except for the final redistribution on a single new array of length $\frac{N + \epsilon}{P}$, the memory footprint
-only depends on the number of nodes involved, hence it should be scalable to thousands of MPI ranks. Anyone
-got a spare 200,000 nodes to benchmark this?
+Except for the final redistribution on a single new array of length $\frac{N + \epsilon}{P}$, the
+memory footprint only depends on the number of nodes involved, hence it should be scalable to
+thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
 
 
 ### References
