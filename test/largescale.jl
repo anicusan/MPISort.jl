@@ -17,11 +17,11 @@ rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
 
-function largescale(num_elements=50_000_000)
+function largescale(num_elements=500_000)
 
     # Generate local array on each MPI rank - even with different number of elements
     rng = Xoshiro(rank)
-    num_elements = 50_000_000 + rank * (num_elements ÷ 20)
+    num_elements = 500_000 + rank * (num_elements ÷ 20)
     local_array = rand(rng, 1:10 * num_elements, num_elements)
 
     # Sort arrays across all MPI ranks

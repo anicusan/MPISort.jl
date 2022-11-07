@@ -12,7 +12,7 @@ end
 
 
 @testset "largescale" begin
-    np = 8
+    np = 4
     mpiexec() do exe
         p = run(`$exe -n $np $(Base.julia_cmd()) largescale.jl`)
         @test success(p)
