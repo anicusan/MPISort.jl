@@ -88,10 +88,7 @@ returned**; this is required as the vector size will change with data migration.
 function mpisort!(
     v::AbstractVector;
     alg::SIHSort,
-    lt=isless,
-    by=identity,
-    rev::Bool=false,
-    order::Ordering=Forward,
+    kws...
 )
 
     # Error checks
@@ -103,9 +100,9 @@ function mpisort!(
     nranks = MPI.Comm_size(comm)
 
     if isnothing(alg.sorter)
-        sorter! = v -> Base.sort!(v; lt=lt, by=by, rev=rev, order=order)
+        sorter! = v -> Base.sort!(v; kws...)
     elseif alg.sorter isa Algorithm
-        sorter! = v -> Base.sort!(v; alg=alg.sorter, lt=lt, by=by, rev=rev, order=order)
+        sorter! = v -> Base.sort!(v; alg=alg.sorter, kws...)
     elseif alg.sorter isa Function
         sorter! = alg.sorter
     end
@@ -158,7 +155,7 @@ function mpisort!(
 
     @inbounds Threads.@threads for i in 1:num_samples_global
         # TODO: check the `by` is only applied on `v`
-        histogram[i] = searchsortedlast(v, samples[i]; by=by, lt=lt, rev=rev, order=order)
+        histogram[i] = searchsortedlast(v, samples[i]; kws...)
     end
 
     # Sum all histograms on root to find samples' _global_ positions.
@@ -224,7 +221,7 @@ function mpisort!(
     end
 
     @inbounds Threads.@threads for i in 1:num_splitters
-        histogram[i] = searchsortedlast(v, splitters[i]; by=by, lt=lt, rev=rev, order=order)
+        histogram[i] = searchsortedlast(v, splitters[i]; kws...)
     end
 
     # The histogram dictates how many elements will be sent to each process
