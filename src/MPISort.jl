@@ -3,11 +3,12 @@ module MPISort
 
 # Private imports
 using Base.Sort
-using Base.Order
 
 using MPI
 using Parameters
 using DocStringExtensions
+
+using GPUArraysCore: AbstractGPUArray
 
 
 # Public exports
@@ -56,6 +57,9 @@ Sampling with interpolated histograms sorting algorithm, or SIHSort (pronounce _
     "MPI communicator used."
     comm::MPI.Comm                              = MPI.COMM_WORLD
 
+    "MPI root rank for reductions."
+    root::Int                                   = 0
+
     "Local in-place sorter used."
     sorter::Union{Nothing, Algorithm, Function} = nothing
 
@@ -63,8 +67,8 @@ Sampling with interpolated histograms sorting algorithm, or SIHSort (pronounce _
     stats::SIHSortStats                         = SIHSortStats()
 end
 
-SIHSort(comm) = SIHSort(;comm=comm)
-SIHSort(comm, sorter) = SIHSort(;comm=comm, sorter=sorter)
+SIHSort(comm; kws...) = SIHSort(;comm=comm, kws...)
+SIHSort(comm, sorter; kws...) = SIHSort(;comm=comm, sorter=sorter, kws...)
 
 
 
@@ -74,38 +78,69 @@ SIHSort(comm, sorter) = SIHSort(;comm=comm, sorter=sorter)
     function mpisort!(
         v::AbstractVector;
         alg::SIHSort,
-        lt=isless,
         by=identity,
-        rev::Bool=false,
-        order::Ordering=Forward,
+        kws...
     )
 
 Distributed MPI-based sorting API with the same inputs as the base Julia sorters.
 
 Important: the input vector will be mutated, but the sorted elements for each MPI rank **will be
 returned**; this is required as the vector size will change with data migration.
+
+Additional keywords `kws...` are forwarded to the local sorter and `searchsortedlast`.
+
+# Examples
+
+Different sorting settings:
+
+```julia
+# Automatically uses MPI.COMM_WORLD as communicator; doesn't save sorting stats
+sorted_local_array = mpisort!(local_array; alg=SIHSort())
+
+# Reverse sorting; specify communicator explicitly
+sorted_local_array = mpisort!(local_array; alg=SIHSort(comm), rev=true)
+
+# Specify key to sort by; see https://docs.julialang.org/en/v1/base/sort/
+sorted_local_array = mpisort!(local_array; alg=SIHSort(), by=x->x["key"])
+
+# Different ordering; see https://docs.julialang.org/en/v1/base/sort/#Alternate-orderings
+sorted_local_array = mpisort!(local_array; alg=SIHSort(), order=Reverse)
+
+# Save sorting stats
+alg = SIHSort(comm)
+sorted_local_array = mpisort!(local_array; alg=alg)
+
+@show alg.stats.splitters               # `nranks - 1` elements splitting arrays between nodes
+@show alg.stats.num_elements            # `nranks` integers specifying number of elements on each node
+
+# Use different in-place local sorter
+alg = SIHSort(comm, nothing)            # Default: standard Base.sort!
+alg = SIHSort(comm, QuickSort)          # Specify algorithm, passed to Base.sort!(...; alg=<Algorithm>)
+alg = SIHSort(comm, v -> mysorter!(v))  # Pass any function that sorts a local vector in-place
+```
 """
 function mpisort!(
     v::AbstractVector;
     alg::SIHSort,
-    lt=isless,
     by=identity,
-    rev::Bool=false,
-    order::Ordering=Forward,
+    kws...
 )
 
     # Error checks
     length(v) > 0 || throw(ArgumentError("`v` must have >= 1 elements"))
+    firstindex(v) == 1 || throw(ArgumentError("`v` indices must start at 1 currently"))
 
     # Extract relevant settings
     comm = alg.comm
+    root = alg.root
+
     rank = MPI.Comm_rank(comm)
     nranks = MPI.Comm_size(comm)
 
     if isnothing(alg.sorter)
-        sorter! = v -> Base.sort!(v; lt=lt, by=by, rev=rev, order=order)
+        sorter! = v -> Base.sort!(v; by=by, kws...)
     elseif alg.sorter isa Algorithm
-        sorter! = v -> Base.sort!(v; alg=alg.sorter, lt=lt, by=by, rev=rev, order=order)
+        sorter! = v -> Base.sort!(v; alg=alg.sorter, by=by, kws...)
     elseif alg.sorter isa Function
         sorter! = alg.sorter
     end
@@ -118,51 +153,60 @@ function mpisort!(
         return v
     end
 
-    # Extract samples
+    # Number of samples on to be extracted on each rank samples
     num_elements = length(v)
     num_samples = 2 * nranks * ilog2(nranks, RoundUp)
     num_samples_global = num_samples * nranks
-    isamples = IntLinSpace(1, num_elements, num_samples)
 
     # Figure out key type, then allocate vector of samples
-    vtype = typeof(by(v[1]))
+    keytype = typeof(by(v[1]))
 
     # Allocate vector of samples across all processes; initially only set the
     # first `num_samples` elements
-    samples = Vector{vtype}(undef, num_samples_global)
+    samples = Vector{keytype}(undef, num_samples_global)
 
-    @inbounds Threads.@threads for i in 1:num_samples
-        samples[i] = by(v[isamples[i]])
+    # Extract initial samples - on GPUs do vectorised indexing, on CPUs scalar indexing
+    isamples = IntLinSpace(1, num_elements, num_samples)
+    if v isa AbstractGPUArray
+        indices = Vector{Int}(undef, num_elements)
+        @inbounds for i in 1:num_samples
+            indices[i] = isamples[i]
+        end
+
+        samples[:] = by.(v[indices])
+    else
+        @inbounds for i in 1:num_samples
+            samples[i] = by(v[isamples[i]])
+        end
     end
 
     # Gather all samples on root process
-    if rank == 0
-        MPI.Gather!(MPI.IN_PLACE, MPI.UBuffer(samples, num_samples), 0, comm)
+    if rank == root
+        MPI.Gather!(MPI.IN_PLACE, MPI.UBuffer(samples, num_samples), root, comm)
     else
-        MPI.Gather!(MPI.Buffer(@view(samples[1:num_samples])), nothing, 0, comm)
+        MPI.Gather!(MPI.Buffer(@view(samples[1:num_samples])), nothing, root, comm)
     end
 
     # Sort gathered samples on root process
-    if rank == 0
+    if rank == root
         sorter!(samples)
     end
 
     # Broadcast sorted samples to all processes
-    MPI.Bcast!(samples, 0, comm)
+    MPI.Bcast!(samples, root, comm)
 
     # Compute histograms for each sample - i.e. find number of elements before them.
     # Optimisation: add one extra element at the end equal to the number of
     # elements across all processes; reduces number of communications
-    histogram = Vector{Int64}(undef, num_samples_global + 1)
+    histogram = Vector{Int}(undef, num_samples_global + 1)
     histogram[end] = num_elements
 
     @inbounds Threads.@threads for i in 1:num_samples_global
-        # TODO: check the `by` is only applied on `v`
-        histogram[i] = searchsortedlast(v, samples[i]; by=by, lt=lt, rev=rev, order=order)
+        histogram[i] = searchsortedlast(v, samples[i]; by=by, kws...)
     end
 
     # Sum all histograms on root to find samples' _global_ positions.
-    MPI.Reduce!(histogram, +, 0, comm)
+    MPI.Reduce!(histogram, +, root, comm)
 
     # Optimisation: the last element was the number of elements across all
     # processes (only on root, after the reduction). Extract it, then delete it
@@ -171,16 +215,16 @@ function mpisort!(
 
     # Select best splitters on root process
     num_splitters = nranks - 1
-    splitters = Vector{vtype}(undef, num_splitters)
+    splitters = Vector{keytype}(undef, num_splitters)
 
-    if rank == 0
+    if rank == root
         @inbounds Threads.@threads for i in 1:num_splitters
             # Best splitter divides all elements equally across processes
             ideal_position = div(i * num_elements_global, nranks, RoundNearest)
             closest_index = searchsortedlast(histogram, ideal_position)
 
             # If the keys / samples are numbers, interpolate to find better splitter
-            if vtype <: Number
+            if keytype <: Number
                # Linear function from (x0, y0) to (x1, y1), where x is the sample
                # and y is the histogram / global position
                 if closest_index == num_samples_global
@@ -196,7 +240,7 @@ function mpisort!(
 
                 ideal_splitter = x0 + (ideal_position - y0) / (y1 - y0) * (x1 - x0)
 
-                if vtype <: Integer
+                if keytype <: Integer
                     splitters[i] = ceil(ideal_splitter)
                 else
                     splitters[i] = ideal_splitter
@@ -210,25 +254,25 @@ function mpisort!(
     end
 
     # Broadcast best splitters on all processes
-    MPI.Bcast!(splitters, 0, comm)
+    MPI.Bcast!(splitters, root, comm)
 
     # Histogram splitters; reuse previous histogram variable, which is always larger.
     # Same optimisation as above - save one extra element as the total number of
     # elements being sorted
     histogram = @view(histogram[1:num_splitters + 1])
 
-    if rank == 0
+    if rank == root
         histogram[end] = num_elements_global
     else
         histogram[end] = 0                      # Will be reduced
     end
 
     @inbounds Threads.@threads for i in 1:num_splitters
-        histogram[i] = searchsortedlast(v, splitters[i]; by=by, lt=lt, rev=rev, order=order)
+        histogram[i] = searchsortedlast(v, splitters[i]; by=by, kws...)
     end
 
     # The histogram dictates how many elements will be sent to each process
-    num_elements_send = Vector{Int64}(undef, nranks)
+    num_elements_send = Vector{Int}(undef, nranks)
     num_elements_send[1] = histogram[1]
     @inbounds @simd for i in 2:nranks - 1
         num_elements_send[i] = histogram[i] - histogram[i - 1]
@@ -236,7 +280,7 @@ function mpisort!(
     num_elements_send[nranks] = num_elements - histogram[nranks - 1]
 
     # Inform each process of number of elements to be received
-    num_elements_recv = Vector{Int64}(undef, nranks)
+    num_elements_recv = Vector{Int}(undef, nranks)
 
     MPI.Alltoall!(
         MPI.UBuffer(num_elements_send, 1),
@@ -254,7 +298,7 @@ function mpisort!(
     histogram = @view(histogram[1:num_splitters])
 
     # Compute number of elements to be stored on each process
-    num_elements_after = Vector{Int64}(undef, nranks)
+    num_elements_after = Vector{Int}(undef, nranks)
 
     num_elements_after[1] = histogram[1]
     @inbounds @simd for i in 2:nranks - 1
