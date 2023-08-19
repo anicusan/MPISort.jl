@@ -1,7 +1,7 @@
 name = "MPISort"
 uuid = "404a976e-21b5-45c7-95b2-5d74c9953ee0"
 authors = ["Andrei-Leonard Nicusan"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
