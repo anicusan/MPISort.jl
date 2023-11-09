@@ -21,8 +21,8 @@ MPI-related), optimised for minimum inter-rank communication and memory footprin
 - **Does not require that distributed data fits into the memory of a single node**. No IO either.
 - Works for any comparison-based data, with additional optimisations for numeric elements.
 - Optimised for minimum MPI communication; can use Julia threads on each shared-memory node.
-- The node-local arrays may have different sizes; sorting will try to balance number of elements held by each MPI rank.
-- Works with any `AbstractVector`, including accelerators such as GPUs (TODO: test this further). Julia type-inference and optimisations do wonders.
+- The node-local arrays may have different sizes; sorting will try to balance the number of elements held by each MPI rank.
+- Works with any `AbstractVector`, including accelerators such as GPUs (see Note).
 - Implements the standard Julia `sort!` API, and naturally works for custom data, comparisons, orderings, etc.
 
 
@@ -116,6 +116,19 @@ $$ k = 2P \ log_2 P $$
 Except for the final redistribution on a single new array of length $\frac{N + \epsilon}{P}$, the
 memory footprint only depends on the number of nodes involved, hence it should be scalable to
 thousands of MPI ranks. Anyone got a spare 200,000 nodes to benchmark this?
+
+
+### Note on sorting multi-node GPU arrays
+
+`SIHSort` is generic over the input array type, so it can work with GPU arrays - e.g. Julia
+`CUDA.CuArray` - and benefit from MPI-configured, optimised inter-GPU connects.
+
+However, to be fully performant, it needs:
+- A single-node `sort` implementation - at the moment, only `CUDA.CuArray` has one; there is great potential in a `KernelAbstractions.jl` sorter, we really need one!
+- A fully GPU-based `searchsortedlast` implementation; **we do not have one** yet, so we rely on a binary search where each tested element is copied to the CPU (!), which of course is not great. More great potential in some optimised `KernelAbstractions.jl` kernels!
+
+While it works currently, it is not ideal: sorting 1,000,000 `Int32` values split across 2 MPI
+ranks takes \~0.015s on my Intel i9 CPU and \~0.034s on my NVidia Quadro RTX4000 with Max-Q.
 
 
 ### References

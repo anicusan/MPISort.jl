@@ -8,6 +8,8 @@ using MPI
 using MPISort
 using Random
 
+using CUDA
+
 
 # Initialise MPI, get communicator for all ranks, rank index, number of ranks
 MPI.Init()
@@ -22,7 +24,7 @@ function largescale(num_elements=500_000)
     # Generate local array on each MPI rank - even with different number of elements
     rng = Xoshiro(rank)
     num_elements = 500_000 + rank * (num_elements ÷ 20)
-    local_array = rand(rng, Int32(1):Int32(10 * num_elements), num_elements)
+    local_array = CuArray(rand(rng, Int32(1):Int32(10 * num_elements), num_elements))
 
     # Sort arrays across all MPI ranks
     alg = SIHSort(comm)

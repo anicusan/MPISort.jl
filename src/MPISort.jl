@@ -8,7 +8,7 @@ using MPI
 using Parameters
 using DocStringExtensions
 
-using GPUArraysCore: AbstractGPUArray
+using GPUArraysCore: AbstractGPUArray, @allowscalar
 
 
 # Public exports
@@ -159,7 +159,7 @@ function mpisort!(
     num_samples_global = num_samples * nranks
 
     # Figure out key type, then allocate vector of samples
-    keytype = typeof(by(v[1]))
+    keytype = typeof(by(@allowscalar(v[1])))
 
     # Allocate vector of samples across all processes; initially only set the
     # first `num_samples` elements
@@ -168,12 +168,17 @@ function mpisort!(
     # Extract initial samples - on GPUs do vectorised indexing, on CPUs scalar indexing
     isamples = IntLinSpace(1, num_elements, num_samples)
     if v isa AbstractGPUArray
-        indices = Vector{Int}(undef, num_elements)
+        indices = Vector{Int}(undef, num_samples)
         @inbounds for i in 1:num_samples
             indices[i] = isamples[i]
         end
 
-        samples[:] = by.(v[indices])
+        # Compute by on the GPU, then transfer samples only back onto CPU
+        samples_gpu = by.(v[indices])
+        samples_cpu = Vector(samples_gpu)
+
+        # And copy samples into global vector
+        samples[1:num_samples] .= samples_cpu
     else
         @inbounds for i in 1:num_samples
             samples[i] = by(v[isamples[i]])
@@ -202,7 +207,7 @@ function mpisort!(
     histogram[end] = num_elements
 
     @inbounds Threads.@threads for i in 1:num_samples_global
-        histogram[i] = searchsortedlast(v, samples[i]; by=by, kws...)
+        histogram[i] = @allowscalar searchsortedlast(v, samples[i]; by=by, kws...)
     end
 
     # Sum all histograms on root to find samples' _global_ positions.
@@ -268,7 +273,7 @@ function mpisort!(
     end
 
     @inbounds Threads.@threads for i in 1:num_splitters
-        histogram[i] = searchsortedlast(v, splitters[i]; by=by, kws...)
+        histogram[i] = @allowscalar searchsortedlast(v, splitters[i]; by=by, kws...)
     end
 
     # The histogram dictates how many elements will be sent to each process
